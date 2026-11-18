@@ -42,10 +42,16 @@ def generate_launch_description():
     ]
 
 
-    model_config_path_arg = DeclareLaunchArgument(
-        'model_config_path',
-        default_value='/home/ros2_ws/src/capacitynet/config/test_reach.yaml',
-        description='Path to the reachability model YAML config'
+    heron_package_arg = DeclareLaunchArgument(
+        'heron_package',
+        default_value='full_setup_20260805_1144',
+        description='Heron Package: a name under $HERON_EXPERIMENT_DIR/heron_packages, or a path'
+    )
+
+    precision_arg = DeclareLaunchArgument(
+        'precision',
+        default_value='fp16',
+        description='Engine precision: pytorch, fp32, fp16 or int8 (built beforehand by heron benchmark)'
     )
 
     workspace_radius_arg = DeclareLaunchArgument(
@@ -135,7 +141,8 @@ def generate_launch_description():
         name='workspace_reachability_node',
         output='screen',
         parameters=[{
-            'model_config_path': LaunchConfiguration('model_config_path'),
+            'heron_package': LaunchConfiguration('heron_package'),
+            'precision': LaunchConfiguration('precision'),
             'workspace_radius': LaunchConfiguration('workspace_radius'),
             'path_max_samples': LaunchConfiguration('path_max_samples'),
             'output_dir': LaunchConfiguration('output_dir'),
@@ -164,7 +171,8 @@ def generate_launch_description():
 
 
     return LaunchDescription(declared +[
-        model_config_path_arg,
+        heron_package_arg,
+        precision_arg,
         workspace_radius_arg,
         path_max_samples_arg,
         output_dir_arg,

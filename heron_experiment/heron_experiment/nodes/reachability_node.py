@@ -13,25 +13,28 @@ from sensor_msgs.msg import PointCloud2, PointField
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from std_srvs.srv import Trigger
 
-from heron_experiment.legacy_engine.reachability_engine import ReachabilityEngine
+from heron_experiment.core.reachability_model import ReachabilityModel
 
 
 class ReachabilityNode(Node):
     def __init__(self):
         super().__init__('reachability_node')
 
-        self.declare_parameter('model_config_path', '/home/ros2_ws/src/capacitynet/config/test_reach.yaml')
+        # Heron Package (path, or name under $HERON_EXPERIMENT_DIR/heron_packages) and the
+        # precision of its engine, built beforehand on this machine by heron benchmark.
+        self.declare_parameter('heron_package', '')
+        self.declare_parameter('precision', 'fp16')
+        self.declare_parameter('allow_pytorch_fallback', True)
         self.declare_parameter('save_map_path', '~/reachability_map.h5')
         self.declare_parameter('continuous_save', False)
         self.declare_parameter('save_replay_path', '')
         self.declare_parameter('log_timing', False)
-        # N'affecte QUE le fallback PyTorch (pas de trt_engine_path valide dans le
-        # YAML) : un engine TensorRT a sa précision figée au build (fp16 via
-        # export_to_trt.py, int8 via calibrate_int8.py) et ignore ce paramètre.
-        self.declare_parameter('fp16', False)
 
-        config_path = self.get_parameter('model_config_path').value
-        fp16 = bool(self.get_parameter('fp16').value)
+        package = self.get_parameter('heron_package').value
+        if not package:
+            raise ValueError('heron_package is not set: give a Heron Package path or name')
+        precision = self.get_parameter('precision').value
+        fallback = bool(self.get_parameter('allow_pytorch_fallback').value)
 
         replay_path = self.get_parameter('save_replay_path').value
         if not replay_path:
@@ -44,8 +47,9 @@ class ReachabilityNode(Node):
         self._save_counter = 0
         self.get_logger().info(f'Replay save path: {self._replay_path}')
 
-        self.engine = ReachabilityEngine(config_path, fp16=fp16)
-        self.get_logger().info(f'ReachabilityEngine loaded (fp16={fp16})')
+        self.model = ReachabilityModel(package, precision, fallback=fallback, log=self.get_logger().warn)
+        self.get_logger().info(
+            f'Heron Package {self.model.experiment} loaded, running on {self.model.backend}')
 
         self.metrics_pub = self.create_publisher(ReachabilityMetrics, '/reachability_node/metrics', 10)
         self._metrics_frame_counter = 0
@@ -102,13 +106,19 @@ class ReachabilityNode(Node):
         self.get_logger().info('Subscribed to /curobo_trajectory_planner/voxel_grid_sparse')
 
     def handle_sparse_voxel(self, msg: SparseVoxelGrid):
+        mismatch = self.model.check_grid(msg)
+        if mismatch is not None:
+            self.get_logger().error(f'{mismatch}: not running the model on this voxel grid',
+                                    throttle_duration_sec=10.0)
+            return
+
         t_start = time.time()
         sx, sy, sz = msg.size_x, msg.size_y, msg.size_z
 
-        voxel_map = self.engine.preprocess(msg.occupied_indices, sx, sy, sz)
+        scene = self.model.scene(msg)
         t_after_preprocess = time.time()
 
-        prediction = self.engine.predict(voxel_map)
+        prediction = self.model.predict(scene)
         t_after_predict = time.time()
 
         vg_info = {
@@ -125,7 +135,8 @@ class ReachabilityNode(Node):
             self._last_prediction_np = self._pred_host.numpy()
         self._pred_host.copy_(prediction)   # D2H + cast dans le buffer réutilisé
 
-        self._last_voxel_grid_np = voxel_map.squeeze().float().cpu().numpy()
+        # Occupancy (1 = obstacle), as the generator writes voxel_grid: saved maps are Scenes.
+        self._last_voxel_grid_np = scene.float().cpu().numpy()
         self._last_vg_info = vg_info
 
         # Publication inline (nuage petit -> coût négligeable).

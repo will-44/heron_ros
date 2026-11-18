@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Latest voxel grid -> N*N reachability maps -> Q_i -> grad Q, every cycle_period.
 
-    SparseVoxelGrid -> ReachabilityEngine.preprocess
-                    -> ObstacleMapTransformer (grid_size x grid_size grid of shifted obstacle maps)
-                    -> ReachabilityEngine.predict_batch  (grid_size**2 reachability maps)
+    SparseVoxelGrid -> ReachabilityModel.scene      (occupancy, after checking the grid)
+                    -> ObstacleMapTransformer (grid_size x grid_size grid of shifted Scenes)
+                    -> ReachabilityModel.predict    (grid_size**2 reachability maps)
                     -> GradientBasedController.evaluate  (Q_i, grad Q)
 
 The voxel grid subscription only caches the latest message; a timer drives the
@@ -30,7 +30,7 @@ from heron_experiment.core.gradient_controller import GradientBasedController
 from heron_experiment.core.grid_markers import build_grid_markers
 from heron_experiment.components.node_component import NodeComponent
 from heron_experiment.core.obstacle_transformer import ObstacleMapTransformer
-from heron_experiment.legacy_engine.reachability_engine import ReachabilityEngine
+from heron_experiment.core.reachability_model import ReachabilityModel
 
 
 @dataclass
@@ -74,14 +74,19 @@ class ReachabilityPipeline(NodeComponent):
         # voxel grid actually publishes: the subscription only caches the
         # latest message, a timer runs the cycle on it every cycle_period.
         self.cycle_period = float(self._declare('cycle_period', 2.0))
-        self.model_config_path = self._declare(
-            'model_config_path', '/home/ros2_ws/src/capacitynet/config/test_reach.yaml')
-        self.fp16 = bool(self._declare('fp16', False))
+        # The Heron Package to run: a path, or a name under
+        # $HERON_EXPERIMENT_DIR/heron_packages. Its engine for `precision` must have
+        # been built on this machine (heron benchmark); see ReachabilityModel.
+        self.heron_package = self._declare('heron_package', '')
+        self.precision = self._declare('precision', 'fp16')
+        # A missing engine runs PyTorch instead (slower), loudly, rather than
+        # leaving the node without a model.
+        self.allow_pytorch_fallback = bool(self._declare('allow_pytorch_fallback', True))
         self.grid_spacing = float(self._declare('grid_spacing', 0.10))
         # Candidate grid is grid_size x grid_size (must be odd, >= 3). Cost
         # scales linearly with grid_size**2 — see OPTIMIZATIONS.md. Validated
         # here rather than left to GradientBasedController so a bad value fails
-        # before _setup_engine() spends seconds loading the model onto the GPU.
+        # before _setup_model() spends seconds loading the model onto the GPU.
         self.grid_size = int(self._declare('grid_size', 3))
         if self.grid_size < 3 or self.grid_size % 2 == 0:
             raise ValueError(
@@ -106,8 +111,9 @@ class ReachabilityPipeline(NodeComponent):
         # Called with a GradientResult once a cycle completes.
         self.on_result = None
         # Called with a short reason string when a cycle is skipped before
-        # inference runs (gate closed, no voxel grid yet, region unresolved, or
-        # the region doesn't fit the grid) — see _on_timer. Never called for a
+        # inference runs (gate closed, no voxel grid yet, region unresolved,
+        # the region doesn't fit the grid, or the voxel grid is not laid out like
+        # the network's input) — see _on_timer. Never called for a
         # failure *during* inference; only for these known, expected early-outs.
         self.on_skip = None
 
@@ -124,16 +130,19 @@ class ReachabilityPipeline(NodeComponent):
         # pattern in capacitynet.py.
         self.last_debug_dump = None
 
-        self._setup_engine()
+        self._setup_model()
         self._setup_interfaces()
 
     # ── Setup ────────────────────────────────────────────────────────────────
 
-    def _setup_engine(self):
-        import torch
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.log.info(f'Loading reachability model on {self.device}...')
-        self.engine = ReachabilityEngine(self.model_config_path, fp16=self.fp16)
+    def _setup_model(self):
+        if not self.heron_package:
+            raise ValueError('heron_package is not set: give a Heron Package path or name')
+        self.log.info(f'Loading Heron Package {self.heron_package!r} at {self.precision}...')
+        self.model = ReachabilityModel(
+            self.heron_package, self.precision, fallback=self.allow_pytorch_fallback,
+            log=self.log.warn)
+        self.device = str(self.model.device)
 
         # Resolution is a placeholder; it is overwritten per message from the
         # live grid via update_resolution().
@@ -151,7 +160,8 @@ class ReachabilityPipeline(NodeComponent):
             device=self.device,
             gradient_method=self.gradient_method,
         )
-        self.log.info('Reachability model loaded')
+        self.log.info(
+            f'Reachability model loaded: {self.model.experiment} on {self.model.backend} ({self.device})')
 
     def _setup_interfaces(self):
         node = self.node
@@ -182,8 +192,8 @@ class ReachabilityPipeline(NodeComponent):
 
     @property
     def backend(self):
-        """Name of the backend the engine actually loaded: 'TensorRT' or 'PyTorch'."""
-        return 'TensorRT' if self.engine.trt_model is not None else 'PyTorch'
+        """What actually runs the network: 'pytorch', 'tensorrt_int8', ..."""
+        return self.model.backend
 
     # ── Cycle ────────────────────────────────────────────────────────────────
 
@@ -212,6 +222,13 @@ class ReachabilityPipeline(NodeComponent):
             self._skip('region_unresolved')
             return
 
+        mismatch = self.model.check_grid(msg)
+        if mismatch is not None:
+            self.log.error(f'{mismatch}: not running the model on this voxel grid',
+                           throttle_duration_sec=10.0)
+            self._skip('grid_mismatch')
+            return
+
         sx, sy, sz = msg.size_x, msg.size_y, msg.size_z
         vg_info = {
             'origin': msg.origin,
@@ -227,13 +244,13 @@ class ReachabilityPipeline(NodeComponent):
 
         t_start = time.time()
 
-        voxel_map = self.engine.preprocess(msg.occupied_indices, sx, sy, sz)
+        scene = self.model.scene(msg)
         self.obstacle_transformer.update_resolution(vg_info['resolution'])
         transformed = self.obstacle_transformer.generate_grid_transforms(
-            voxel_map, grid_spacing=self.delta, grid_size=self.grid_size,
+            scene[None, None], grid_spacing=self.delta, grid_size=self.grid_size,
             origin=vg_info['origin'])
 
-        reachability_maps = self.engine.predict_batch(transformed)
+        reachability_maps = self.model.predict(transformed.squeeze(1))
 
         self.gradient_ctrl.update_workspace_region(
             centers, has_goal_center=self.region.region_has_goal)
@@ -245,14 +262,14 @@ class ReachabilityPipeline(NodeComponent):
         # about to be called.
         self.last_debug_dump = {
             'reachability_maps': reachability_maps.cpu().numpy(),         # (n_candidates, D, D, D)
-            'obstacle_maps': transformed.squeeze(1).cpu().numpy(),        # (n_candidates, D, D, D), per-candidate shifted input
+            'obstacle_maps': transformed.squeeze(1).cpu().numpy(),        # (n_candidates, D, D, D) bool, per-candidate shifted Scene
             'masks': np.stack([m.to_numpy() for m in self.gradient_ctrl.last_masks]),  # (n_candidates, D, D, D) float32 weights
             'scores': debug['scores'],
             'vg_info': vg_info,
             'frame_id': msg.header.frame_id,
         }
 
-        del reachability_maps, transformed, voxel_map
+        del reachability_maps, transformed, scene
 
         result = GradientResult(
             gradient=debug['gradient'],

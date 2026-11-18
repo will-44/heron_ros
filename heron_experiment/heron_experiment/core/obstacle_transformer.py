@@ -13,12 +13,16 @@ class ObstacleMapTransformer:
     in the opposite direction. All operations stay on GPU to avoid
     CPU-GPU transfers.
 
+    Works on occupancy (True where a voxel holds an obstacle), never on the
+    network's encoded input: encoding a Scene is heron.inference's job, after
+    the translation. Cells a shift leaves without a source are free.
+
     When the base moves by (δx, δy), obstacles move by (-δx, -δy)
     in the base reference frame.
     """
 
     def __init__(self, resolution, device='cuda', static_obstacles_yaml=None,
-                 static_obstacles_definition=None, static_clear_value=0.0):
+                 static_obstacles_definition=None):
         """
         Initialize obstacle map transformer.
 
@@ -27,12 +31,6 @@ class ObstacleMapTransformer:
             device: torch device ('cuda' or 'cpu')
             static_obstacles_yaml: str, path to YAML file with static obstacles (optional)
             static_obstacles_definition: dict, definition of static obstacles (optional)
-            static_clear_value: float, value the static-obstacle voxels are set to
-                before the scene is translated (default: 0.0, historical behavior).
-                With min-max [-1, 1] input 0.0 is neither free (-1) nor occupied
-                (+1), and the cleared region is translated with the scene as a
-                ghost of the static obstacles. Pass the encoding's free value
-                (-1.0 for normalize_input=True) to clear it as free space.
         """
         self.resolution = resolution
         self.device = device
@@ -40,7 +38,6 @@ class ObstacleMapTransformer:
         # Static obstacles configuration
         self.static_obstacles_yaml = static_obstacles_yaml
         self.static_obstacles_definition = static_obstacles_definition
-        self.static_clear_value = static_clear_value
 
         # Cache for static obstacle mask
         self._static_mask = None
@@ -92,7 +89,7 @@ class ObstacleMapTransformer:
         Apply translation to voxel map, preserving static obstacles.
 
         Args:
-            voxel_map: torch.Tensor, shape (1, 1, size_x, size_y, size_z) on GPU
+            voxel_map: torch.Tensor bool occupancy, shape (1, 1, size_x, size_y, size_z) on GPU
             delta_x, delta_y: float, translation in meters (base displacement)
             origin: Point3D-like with .x, .y, .z (required if static obstacles defined)
 
@@ -118,9 +115,8 @@ class ObstacleMapTransformer:
             voxel_map_3d = voxel_map.squeeze(0).squeeze(0)  # (size_x, size_y, size_z)
             static_voxels = static_mask.extract_from_voxelmap(voxel_map_3d)
 
-            # Clear static obstacles before transformation (see static_clear_value)
-            voxel_map_3d = static_mask.apply_to_voxelmap(
-                voxel_map_3d, masked_value=self.static_clear_value)
+            # Clear static obstacles before the translation: they do not move with the base
+            voxel_map_3d = static_mask.apply_to_voxelmap(voxel_map_3d, masked_value=False)
             voxel_map = voxel_map_3d.unsqueeze(0).unsqueeze(0)  # Back to 5D
 
         # Obstacles move opposite to the base: stepping the base to
@@ -136,10 +132,9 @@ class ObstacleMapTransformer:
         dj = -int(round(delta_y / self.resolution))
 
         # voxel_map is (batch, channels, size_x, size_y, size_z): x and y are
-        # axes 2 and 3. Cells with no source after the shift are filled with -1
-        # (unknown/unobserved, distinct from 0=free and 1=occupied), and nothing
-        # wraps around from the opposite face.
-        transformed = translate_filled(voxel_map, (0, 0, di, dj), fill_value=-1)
+        # axes 2 and 3. Cells with no source after the shift are free, and
+        # nothing wraps around from the opposite face.
+        transformed = translate_filled(voxel_map, (0, 0, di, dj), fill_value=False)
 
         # Restore static obstacles at their original positions
         if static_mask is not None and static_voxels is not None:
@@ -169,7 +164,7 @@ class ObstacleMapTransformer:
         GradientBasedController.grid_offsets().
 
         Args:
-            voxel_map: torch.Tensor, shape (1, 1, size_x, size_y, size_z) on GPU
+            voxel_map: torch.Tensor bool occupancy, shape (1, 1, size_x, size_y, size_z) on GPU
             grid_spacing: float, spacing δ in meters (default: 0.10m)
             grid_size: int, odd, >= 3 (default: 3)
             origin: Point3D-like with .x, .y, .z (required if static obstacles defined)

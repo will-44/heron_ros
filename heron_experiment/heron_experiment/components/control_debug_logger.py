@@ -22,8 +22,8 @@ out in q_center alone. Same order as GradientResult.centers; a cycle with
 fewer spheres than N leaves the trailing columns blank, not zero.
 
 `log_skip` writes a row for a cycle the pipeline never ran inference for at
-all (gate closed, no voxel grid yet, region unresolved, or the region doesn't
-fit the grid — see ReachabilityPipeline.on_skip) — only `timestamp` and
+all (gate closed, no voxel grid yet, region unresolved, the region doesn't
+fit the grid, or the grid is not the network's — see ReachabilityPipeline.on_skip) — only `timestamp` and
 `skip_reason` are filled, so a gap in grad_x/q_center/etc. is distinguishable
 from "the controller just hadn't ticked yet" instead of silently reading as a
 missing row.

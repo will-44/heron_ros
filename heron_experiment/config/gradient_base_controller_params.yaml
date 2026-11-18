@@ -80,12 +80,16 @@
     # actually grasps.
     target_marker_id: 18
 
-    # Path to the reachability model YAML config (shared with workspace_reachability_node)
-    model_config_path: "/home/ros2_ws/src/test.yaml"
+    # Heron Package to run: a name under $HERON_EXPERIMENT_DIR/heron_packages, or a path
+    # (shared with workspace_reachability_node). Make it with `heron export` where the
+    # Experiment was trained, then build its engine here with heron benchmark.
+    heron_package: "full_setup_20260805_1144"
 
-    # Run the PyTorch fallback in half precision (ignored when a TRT engine loads)
-    # (shared with workspace_reachability_node)
-    fp16: false
+    # Engine precision: pytorch, fp32, fp16 or int8 (shared with workspace_reachability_node)
+    precision: "fp16"
+
+    # If that engine is missing, run PyTorch instead (slower) and say so, rather than fail
+    allow_pytorch_fallback: true
 
     # Goal sphere radius in meters (region center 0). Shared with
     # workspace_reachability_node's own goal-sphere scoring
@@ -137,8 +141,8 @@
     # Load world-fixed obstacles from YAML so they are not translated with the base
     use_static_obstacles: false
 
-    # Path to the static obstacles YAML
-    static_obstacles_yaml: "/home/ros2_ws/src/capacitynet/config/floor_world.yml"
+    # Path to the static obstacles YAML (default: the package's config/floor_world.yml)
+    # static_obstacles_yaml: ""
 
     # Rate in Hz at which /cmd_vel is (re)published by the watchdog
     publish_rate: 10.0

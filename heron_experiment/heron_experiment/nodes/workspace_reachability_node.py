@@ -40,7 +40,7 @@ that the controller's own `control_debug.csv` lands in the same place):
     episode_<id>.png     -- Q_goal/Q_path over the episode, with phase bands
 
 Builds a reachability map (RM) from /curobo_trajectory_planner/voxel_grid_sparse
-messages (own ReachabilityEngine instance), scored as Q_goal (sphere on mpc_goal)
+messages (own ReachabilityModel instance), scored as Q_goal (sphere on mpc_goal)
 and Q_path (spheres over an /mpc_predicted_path subsample).
 
 IK generation: on every /mpc_step_diagnostics message (i.e. every MPC control cycle)
@@ -85,7 +85,7 @@ from tf2_ros import Buffer, TransformListener
 from heron_experiment.core import experiment_plots
 from heron_experiment.robot.ikdh_manipulability import IkdhModel
 from heron_experiment.core.workspace_evaluation import WorkspaceEvaluation
-from heron_experiment.legacy_engine.reachability_engine import ReachabilityEngine
+from heron_experiment.core.reachability_model import ReachabilityModel
 
 # Prefix shared by every per-sample file. This is the uniformisation: whatever the
 # signal, a row says which episode it belongs to, how far into it, and under which
@@ -350,7 +350,7 @@ class WorkspaceReachabilityNode(Node):
         super().__init__('workspace_reachability_node')
 
         self._load_parameters()
-        self._setup_engine()
+        self._setup_model()
         self._setup_ikdh()
         self._setup_csv()
         self._setup_interfaces()
@@ -413,9 +413,9 @@ class WorkspaceReachabilityNode(Node):
     # ── Setup ────────────────────────────────────────────────────────────────
 
     def _load_parameters(self):
-        self.declare_parameter(
-            'model_config_path', '/home/ros2_ws/src/capacitynet/config/test_reach.yaml')
-        self.declare_parameter('fp16', False)
+        self.declare_parameter('heron_package', '')
+        self.declare_parameter('precision', 'fp16')
+        self.declare_parameter('allow_pytorch_fallback', True)
 
         self.declare_parameter('voxel_grid_topic', '/curobo_trajectory_planner/voxel_grid_sparse')
         self.declare_parameter('goal_topic', '/curobo_trajectory_planner/mpc_goal')
@@ -473,8 +473,9 @@ class WorkspaceReachabilityNode(Node):
         self.declare_parameter('generate_episode_plot', True)
         self.declare_parameter('generate_run_plots', True)
 
-        self.model_config_path = self.get_parameter('model_config_path').value
-        self.fp16 = bool(self.get_parameter('fp16').value)
+        self.heron_package = self.get_parameter('heron_package').value
+        self.precision = self.get_parameter('precision').value
+        self.allow_pytorch_fallback = bool(self.get_parameter('allow_pytorch_fallback').value)
 
         self.voxel_grid_topic = self.get_parameter('voxel_grid_topic').value
         self.goal_topic = self.get_parameter('goal_topic').value
@@ -522,12 +523,15 @@ class WorkspaceReachabilityNode(Node):
             output_dir = f'/home/ros2_ws/src/capacitynet/results/run_{ts}'
         self.output_dir = os.path.expanduser(output_dir)
 
-    def _setup_engine(self):
-        import torch
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.get_logger().info(f'Loading reachability model on {self.device}...')
-        self.engine = ReachabilityEngine(self.model_config_path, fp16=self.fp16)
-        self.get_logger().info('Reachability model loaded')
+    def _setup_model(self):
+        if not self.heron_package:
+            raise ValueError('heron_package is not set: give a Heron Package path or name')
+        self.get_logger().info(f'Loading Heron Package {self.heron_package!r} at {self.precision}...')
+        self.model = ReachabilityModel(
+            self.heron_package, self.precision, fallback=self.allow_pytorch_fallback,
+            log=self.get_logger().warn)
+        self.device = str(self.model.device)
+        self.get_logger().info(f'Reachability model loaded, running on {self.model.backend}')
 
     def _setup_ikdh(self):
         self.get_logger().info(f'Loading IKDH robot model {self.ikdh_robot_yaml!r}...')
@@ -887,9 +891,12 @@ class WorkspaceReachabilityNode(Node):
             return
         self._last_rm_wall_t = now
 
-        voxel_map = self.engine.preprocess(
-            msg.occupied_indices, msg.size_x, msg.size_y, msg.size_z)
-        self._rm = self.engine.predict(voxel_map)
+        mismatch = self.model.check_grid(msg)
+        if mismatch is not None:
+            self.get_logger().error(f'{mismatch}: not running the model on this voxel grid',
+                                    throttle_duration_sec=10.0)
+            return
+        self._rm = self.model.predict(self.model.scene(msg))
         self._vg_info = {
             'origin': msg.origin,
             'resolution': float(msg.resolution),
