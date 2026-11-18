@@ -35,4 +35,14 @@ Everything the run records lands in `heron_experiment/results/exp_1/<date>_with_
 `workspace_probe.launch.py` runs the same inference and scoring without any base
 command, for bag replay.
 
+## Analyse runs
+
+```bash
+cd heron_experiment
+python3 analysis/setup_2/analyze_setup2.py          # per-run tables and figures, then the comparison
+python3 analysis/paper_tables/paper_tables.py       # the paper's two tables
+```
+
+See [heron_experiment/analysis/README.md](heron_experiment/analysis/README.md).
+
 Vocabulary: [GLOSSARY.md](GLOSSARY.md); decisions: [docs/adr/](docs/adr/).
