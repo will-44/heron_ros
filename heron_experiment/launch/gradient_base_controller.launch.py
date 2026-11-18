@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 r"""Full pick-and-place experiment: base controller + brain + grasp + release + recorder.
 
-Every node of one run writes into the same timestamped `run_dir`, so a run is a
-single self-contained directory rather than files scattered between `results/` and
-whatever `debug_csv_path` happened to point at. Override it to name a run:
+Every node of one run writes into the same run directory,
+results/<experience>/<run_id>/ (see heron_experiment.paths): the nodes record into
+raw/, the run-level figures go to figures/, and config/ gets a copy of the params
+files and of the Heron Package manifest the run used. Name the experience and tag
+the run; earlier runs are never overwritten:
 
     ros2 launch heron_experiment gradient_base_controller.launch.py \\
-        run_dir:=/home/ros2_ws/src/capacitynet/results/with_base_01 \\
+        experience:=exp_1 run_tag:=with_base \\
         run_label:=with_base base_control:=true
+
+`run_dir:=<path>` replaces the whole results/<experience>/<run_id> path.
 
 `base_control:=false` is the control arm of the A/B: the controller node is still
 launched (same GPU load, same instrumentation) but brain never enables it, so it
@@ -16,10 +20,12 @@ every index and phase-summary row -- that is what keeps the two arms separable
 once the runs are pooled for analysis.
 """
 
-from datetime import datetime
+import shutil
+from pathlib import Path
 
+import yaml
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 
 from launch_ros.actions import Node
@@ -37,8 +43,6 @@ TF_REMAP_ARGUMENTS = [
     ('tf_static_topic', '/leeloo/tf_static',
      'Topic carrying tf2_msgs/TFMessage for static transforms'),
 ]
-
-RESULTS_ROOT = '/home/ros2_ws/src/capacitynet/results'
 
 
 def generate_launch_description():
@@ -83,13 +87,15 @@ def generate_launch_description():
     )
     declared.append(brain_params_file_arg)
 
-    # Computed once here rather than by each node, so the recorder's episode
-    # directories and the controller's control_debug.csv land in the *same* run
-    # directory and can be read together afterwards.
-    default_run_dir = f"{RESULTS_ROOT}/run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     declared.append(DeclareLaunchArgument(
-        'run_dir', default_value=default_run_dir,
-        description='Directory receiving every output of this run (one per experiment)'))
+        'experience', default_value='unnamed',
+        description='Experience name: the run goes to results/<experience>/<run_id>/'))
+    declared.append(DeclareLaunchArgument(
+        'run_tag', default_value='',
+        description='Suffix of the run id, after its date (e.g. with_base)'))
+    declared.append(DeclareLaunchArgument(
+        'run_dir', default_value='',
+        description='Directory of this run, replacing results/<experience>/<run_id>'))
     declared.append(DeclareLaunchArgument(
         'run_label', default_value='',
         description='Free-text label stamped on every recorded row (e.g. with_base)'))
@@ -97,7 +103,46 @@ def generate_launch_description():
         'base_control', default_value='true',
         description='Whether brain enables the base controller (A/B condition)'))
 
-    run_dir = LaunchConfiguration('run_dir')
+    return LaunchDescription(declared + [OpaqueFunction(function=_launch_run)])
+
+
+def _prepare_run(context):
+    """Create this run's directory once, and keep what configured it in its config/.
+
+    Computed once here rather than by each node, so the recorder's episode
+    directories and the controller's control_debug.csv land in the *same* run
+    directory and can be read together afterwards.
+    """
+    from heron_experiment import paths
+    from heron_experiment.core.reachability_model import package_path
+
+    given = LaunchConfiguration('run_dir').perform(context)
+    if given:
+        run = Path(given).expanduser()
+        for sub in paths.RUN_SUBDIRS:
+            (run / sub).mkdir(parents=True, exist_ok=True)
+    else:
+        run = paths.new_run_dir(LaunchConfiguration('experience').perform(context),
+                                LaunchConfiguration('run_tag').perform(context))
+    params = {}
+    for arg in ('params_file', 'grasp_params_file', 'release_params_file', 'brain_params_file'):
+        path = Path(LaunchConfiguration(arg).perform(context))
+        shutil.copy2(path, run / 'config' / path.name)
+        if arg == 'params_file':
+            params = yaml.safe_load(path.read_text()) or {}
+    package = next((node.get('ros__parameters', {}).get('heron_package')
+                    for node in params.values() if isinstance(node, dict)
+                    and node.get('ros__parameters', {}).get('heron_package')), None)
+    if package:
+        manifest = package_path(package) / 'manifest.yaml'
+        if manifest.is_file():
+            shutil.copy2(manifest, run / 'config' / 'heron_package_manifest.yaml')
+    return run
+
+
+def _launch_run(context):
+    run = _prepare_run(context)
+    raw = str(run / 'raw')
     # Both nodes declare base_control as a bool; a bare LaunchConfiguration
     # substitutes to the string 'true' and would fail the type check.
     base_control = ParameterValue(LaunchConfiguration('base_control'), value_type=bool)
@@ -114,7 +159,7 @@ def generate_launch_description():
         output='screen',
         parameters=[
             LaunchConfiguration('params_file'),
-            {'debug_csv_path': [run_dir, '/control_debug.csv']},
+            {'debug_csv_path': raw + '/control_debug.csv'},
         ],
         remappings=tf_remappings,
     )
@@ -163,17 +208,18 @@ def generate_launch_description():
         output='screen',
         parameters=[
             LaunchConfiguration('params_file'),
-            {'output_dir': run_dir,
+            {'output_dir': raw,
+             'figures_dir': str(run / 'figures'),
              'run_label': LaunchConfiguration('run_label'),
              'base_control': base_control},
         ],
         remappings=tf_remappings,
     )
 
-    return LaunchDescription(declared + [
+    return [
         gradient_base_controller_node,
         brain_node,
         grasp_node,
         release_node,
         workspace_reachability_node,
-    ])
+    ]

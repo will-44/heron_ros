@@ -66,6 +66,7 @@ import h5py
 import numpy as np
 from std_srvs.srv import Trigger
 
+from heron_experiment import paths
 from heron_experiment.components.node_component import NodeComponent
 
 _FIELDS = [
@@ -129,8 +130,9 @@ class ControlDebugLogger(NodeComponent):
             self.log.info(
                 'ControlDebugLogger: disabled (set debug_csv_path to enable)')
 
-        self.h5_dir = self._declare(
-            'debug_h5_dir', '/home/ros2_ws/src/capacitynet/data')
+        # Default (''): a maps/ directory next to the CSV (the run's raw/), else
+        # results/debug_maps — resolved when a dump is asked for, see _h5_dir().
+        self.h5_dir = self._declare('debug_h5_dir', '')
         self.save_maps_srv = self.node.create_service(
             Trigger, self._private('save_reachability_maps'),
             self.handle_save_reachability_maps, callback_group=self.callback_group)
@@ -247,6 +249,13 @@ class ControlDebugLogger(NodeComponent):
 
     # ── Reachability-map HDF5 dump ──────────────────────────────────────────
 
+    def _h5_dir(self):
+        if self.h5_dir:
+            return self.h5_dir
+        if self.csv_path:
+            return os.path.join(os.path.dirname(os.path.expanduser(self.csv_path)), 'maps')
+        return str(paths.results_dir() / 'debug_maps')
+
     def _save_reachability_maps(self, dir_path):
         """Write one new timestamped H5 file with all n_candidates (RM, obstacle,
         mask) triples for the most recently completed cycle.
@@ -337,7 +346,7 @@ class ControlDebugLogger(NodeComponent):
             response.message = 'No inference cycle completed yet.'
             return response
         try:
-            path = self._save_reachability_maps(self.h5_dir)
+            path = self._save_reachability_maps(self._h5_dir())
             n = self.pipeline.grid_size ** 2
             self.log.info(f'Saved {n} reachability maps to {path}')
             response.success = True

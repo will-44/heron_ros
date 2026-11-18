@@ -16,7 +16,6 @@ ROS-free: a message is anything with occupied_indices, size_x/y/z, resolution an
 origin.x/y/z, like curobo_msgs/SparseVoxelGrid.
 """
 
-import os
 from pathlib import Path
 
 import numpy as np
@@ -27,16 +26,13 @@ _GRID_TOLERANCE_M = 1e-4
 
 
 def package_path(name_or_path):
-    """A Heron Package directory: a path, or a name under $HERON_EXPERIMENT_DIR/heron_packages."""
+    """A Heron Package directory: a path, or a name under heron_packages/ (see heron_experiment.paths)."""
+    from heron_experiment.paths import packages_dir
+
     candidate = Path(str(name_or_path)).expanduser()
     if candidate.is_absolute() or candidate.is_dir():
         return candidate
-    root = os.environ.get('HERON_EXPERIMENT_DIR')
-    if not root:
-        raise ValueError(
-            f'heron_package {str(name_or_path)!r} is a name, but HERON_EXPERIMENT_DIR is not set: '
-            'set it to the heron_experiment source directory, or give the package as a path')
-    return Path(root).expanduser() / 'heron_packages' / str(name_or_path)
+    return packages_dir() / str(name_or_path)
 
 
 class ReachabilityModel:

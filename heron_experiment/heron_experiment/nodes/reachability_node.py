@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import os
-from datetime import datetime
 import rclpy
 from rclpy.node import Node
 import numpy as np
@@ -13,6 +12,7 @@ from sensor_msgs.msg import PointCloud2, PointField
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from std_srvs.srv import Trigger
 
+from heron_experiment import paths
 from heron_experiment.core.reachability_model import ReachabilityModel
 
 
@@ -36,16 +36,10 @@ class ReachabilityNode(Node):
         precision = self.get_parameter('precision').value
         fallback = bool(self.get_parameter('allow_pytorch_fallback').value)
 
-        replay_path = self.get_parameter('save_replay_path').value
-        if not replay_path:
-            ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-            replay_path = os.path.expanduser(f'~/ros2_ws/src/capacitynet/results/reach_{ts}.h5')
-        else:
-            replay_path = os.path.expanduser(replay_path)
-        os.makedirs(os.path.dirname(replay_path), exist_ok=True)
-        self._replay_path = replay_path
+        # Resolved on the first continuous save, so a run that never saves leaves no
+        # empty run directory behind. Default: results/reachability_node/<run_id>/raw/.
+        self._replay_path = None
         self._save_counter = 0
-        self.get_logger().info(f'Replay save path: {self._replay_path}')
 
         self.model = ReachabilityModel(package, precision, fallback=fallback, log=self.get_logger().warn)
         self.get_logger().info(
@@ -144,6 +138,8 @@ class ReachabilityNode(Node):
 
         if self.get_parameter('continuous_save').value:
             try:
+                if self._replay_path is None:
+                    self._replay_path = self._new_replay_path()
                 self._append_to_hdf5(self._replay_path, self._save_counter)
                 self._save_counter += 1
             except Exception as e:
@@ -247,6 +243,16 @@ class ReachabilityNode(Node):
         self.get_logger().info(
             f'RM publiée #{self._pub_count}: {n} pts ({n * 13 / 1e6:.2f} Mo)',
             throttle_duration_sec=2.0)
+
+    def _new_replay_path(self) -> str:
+        path = self.get_parameter('save_replay_path').value
+        if path:
+            path = os.path.expanduser(path)
+            os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        else:
+            path = str(paths.new_run_dir('reachability_node') / 'raw' / 'replay.h5')
+        self.get_logger().info(f'Replay save path: {path}')
+        return path
 
     def _save_to_hdf5(self, path: str) -> None:
         pred = self._last_prediction_np.astype(np.float64)

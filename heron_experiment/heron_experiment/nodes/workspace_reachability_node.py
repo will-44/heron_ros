@@ -85,6 +85,7 @@ from tf2_ros import Buffer, TransformListener
 from heron_experiment.core import experiment_plots
 from heron_experiment.robot.ikdh_manipulability import IkdhModel
 from heron_experiment.core.workspace_evaluation import WorkspaceEvaluation
+from heron_experiment import paths
 from heron_experiment.core.reachability_model import ReachabilityModel
 
 # Prefix shared by every per-sample file. This is the uniformisation: whatever the
@@ -469,6 +470,7 @@ class WorkspaceReachabilityNode(Node):
         self.declare_parameter('base_control', True)
 
         self.declare_parameter('output_dir', '')
+        self.declare_parameter('figures_dir', '')
         self.declare_parameter('log_each_sample', True)
         self.declare_parameter('generate_episode_plot', True)
         self.declare_parameter('generate_run_plots', True)
@@ -518,10 +520,14 @@ class WorkspaceReachabilityNode(Node):
         self.generate_run_plots = bool(self.get_parameter('generate_run_plots').value)
 
         output_dir = self.get_parameter('output_dir').value
+        figures_dir = self.get_parameter('figures_dir').value
         if not output_dir:
-            ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-            output_dir = f'/home/ros2_ws/src/capacitynet/results/run_{ts}'
+            run = paths.new_run_dir('unnamed')
+            output_dir = str(run / 'raw')
+            figures_dir = figures_dir or str(run / 'figures')
         self.output_dir = os.path.expanduser(output_dir)
+        # Run-level figures; the per-episode plot stays in its episode directory.
+        self.figures_dir = os.path.expanduser(figures_dir) if figures_dir else self.output_dir
 
     def _setup_model(self):
         if not self.heron_package:
@@ -1144,7 +1150,8 @@ class WorkspaceReachabilityNode(Node):
         for name, fn in (('base_trajectory.png', experiment_plots.plot_base_trajectory),
                          ('run_summary.png', experiment_plots.plot_run_summary)):
             try:
-                out = fn(self.output_dir)
+                os.makedirs(self.figures_dir, exist_ok=True)
+                out = fn(self.output_dir, os.path.join(self.figures_dir, name))
             except Exception as ex:  # noqa: BLE001 - never let a figure cost the run
                 self.get_logger().warn(f'{name} failed: {ex}')
                 continue
