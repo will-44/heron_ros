@@ -1,0 +1,68 @@
+# Parameters for the `brain` node (brain.py / Brain).
+#
+# Override a single value without editing this file:
+#   ros2 launch capacitynet <launch file> brain_params_file:=/path/to/override.yaml
+# or after launch: ros2 param set /brain <name> <value>
+
+/**:
+  ros__parameters:
+    # Action names exposed by grasp.py/release.py — relative, so they resolve
+    # against brain's own namespace (grasp.py/release.py are themselves
+    # launched unnamespaced).
+    grasp_action_name: "grasp_trigger"
+    release_action_name: "release_trigger"
+
+    # Home positioning: cuRobo's switch-planner service and unified
+    # plan+execute action (same one grasp.py uses).
+    set_planner_service_name: "/curobo_trajectory_planner/set_planner"
+    curobo_execute_action: "/curobo_trajectory_planner/execute_trajectory"
+    # curobo_msgs/srv/SetPlanner planner_type values for this robot's
+    # deployment (not the enum names in SetPlanner.srv/its docstring).
+    planner_type_joint_space: 5
+    planner_type_lbfgs: 2
+    # act_home_enter's arm init/home joint configuration (radians,
+    # joint_1..joint_6), sent open-loop via the joint-space planner at the
+    # start of every pick-and-place cycle.
+    init_joint_positions: [
+      -0.02840041182935238,
+      -1.0044194459915161,
+      1.897898554801941,
+      3.1413369178771973,
+      -1.2819790840148926,
+      0.028416428714990616,
+    ]
+
+    # act_home_exit's end-of-cycle pose, sent as a Cartesian target_pose via
+    # the lbfgs planner (not a joint-space move like init_joint_positions
+    # above -- see _go_to_final_pose in brain.py). target_pose carries no
+    # header; assumed frame is dsr01/base_link, matching grasp.py/release.py's
+    # planning_frame.
+    final_pose_position: [0.307, 0.027, 0.682]
+    final_pose_orientation: [0.707, 0.0, 0.707, 0.0]
+
+    # Mobile base's gradient controller enable service (std_srvs/SetBool) —
+    # enabled once the arm reaches init config at cycle start, disabled once
+    # it's back at init config at cycle end.
+    base_enable_service_name: "/gradient_base_controller/enable"
+
+    # Current state-machine state (e.g. "idle", "act_grasp"), as
+    # std_msgs/String. Transient-local + published on every transition, so a
+    # subscriber started mid-cycle still gets the current value immediately
+    # instead of waiting for the next change.
+    state_topic: "~/state"
+
+    # How the cycle that just ended finished, as
+    # "<success|failure|cancelled>|<message>", published just before the return
+    # to idle. The state topic cannot carry this: success, abort and cancel all
+    # land on the same "idle" string. workspace_reachability_node subscribes to
+    # it to stamp an outcome on every recorded episode.
+    outcome_topic: "~/outcome"
+
+    # Whether this cycle drives the mobile base. false is the control arm of the
+    # with/without-base experiment: base_enable_service_name is never called, so
+    # the controller stays disabled and publishes only zeros while remaining
+    # launched (same GPU load, same instrumentation). Skipping the call rather
+    # than letting it fail matters — a failed enable aborts act_home_enter and
+    # with it the whole cycle. The launch file overrides this from its own
+    # base_control argument.
+    base_control: true

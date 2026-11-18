@@ -1,0 +1,16 @@
+# Empty goal — this action triggers the full pick-and-place cycle run by
+# brain.py: a grasp sequence (grasp.py's grasp_trigger action) followed by a
+# release sequence (release.py's release_trigger action).
+---
+bool success
+string message
+---
+# Published on every state-machine transition of brain.py's own cycle
+# (act_home_enter/act_grasp/act_release/act_home_exit/idle), and forwarded on
+# every state-machine transition reported by whichever sub-sequence is
+# currently running as feedback on its own action (grasp_trigger's or
+# release_trigger's TriggerGrasp/TriggerRelease.Feedback.state). Combined
+# into a single field:
+#   "<brain_state>"               while no sub-sequence is active
+#   "<brain_state>:<sub_state>"   while act_grasp/act_release is forwarding
+string state

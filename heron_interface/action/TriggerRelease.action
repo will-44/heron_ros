@@ -1,0 +1,11 @@
+# Empty goal — this action simply triggers the release state machine.
+---
+bool success
+string message
+---
+# Published on every release state-machine transition (see state_machine.py),
+# mirroring what's published on ~/state — carried on the action feedback
+# channel too so a goal-scoped client (e.g. brain.py) doesn't need a separate
+# topic subscription to forward it.
+string state
+string message

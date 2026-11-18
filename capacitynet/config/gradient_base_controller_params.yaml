@@ -1,0 +1,265 @@
+# Parameters for gradient_base_controller and workspace_reachability_node, launched
+# together by gradient_base_controller.launch.py. Loaded into both nodes via a `/**`
+# wildcard, so a shared key (e.g. goal_topic) only needs to be edited once here; each
+# node simply ignores whatever keys it never declares.
+#
+# Override a single value without editing this file:
+#   ros2 launch capacitynet gradient_base_controller.launch.py params_file:=/path/to/override.yaml
+# or after launch: ros2 param set /gradient_base_controller <name> <value>
+
+/**:
+  ros__parameters:
+    # Per-cycle CSV of the gradient controller. Left empty here on purpose: the
+    # launch file points it at <run_dir>/control_debug.csv so it lands in the same
+    # directory as the recorder's episodes, instead of a fixed path overwritten by
+    # every run. Set it explicitly when running the controller outside the launch.
+    debug_csv_path: ""
+
+    # Interactive Plotly HTML of the explored (goal_x, goal_y, Q_center) trace, one
+    # point per cycle. Empty disables accumulation; when set, call the
+    # ~/save_gradient_exploration service (std_srvs/Trigger) to write it
+    debug_gradient_html_path: ""
+
+    # curobo_msgs/SparseVoxelGrid topic driving the control loop (shared with
+    # workspace_reachability_node)
+    voxel_grid_topic: "/curobo_trajectory_planner/voxel_grid_sparse"
+
+    # Seconds between inference cycles; the voxel grid subscription only caches the
+    # latest message, a timer runs the cycle on it at this fixed cadence
+    cycle_period: 1.0
+
+    # FiducialMarkerArray topics providing the fallback workspace center.
+    # Kinect is primary; the D405 only takes over once the kinect hasn't seen
+    # the target marker for camera_failover_timeout seconds.
+    primary_marker_topic: "/kinect/fiducial_markers"
+    secondary_marker_topic: "/d405/fiducial_markers"
+    camera_failover_timeout: 1.0
+
+    # geometry_msgs/Pose grasp target published by grasp.py; primary region center
+    # (shared with workspace_reachability_node)
+    goal_topic: "/curobo_trajectory_planner/mpc_goal"
+
+    # nav_msgs/Path whose horizon point is unioned with the goal sphere
+    # (shared with workspace_reachability_node)
+    path_topic: "/mpc_predicted_path"
+
+    # Comma-separated seconds-from-now points to look up in the path (nearest
+    # header.stamp each), one sphere per entry; empty = goal only
+    path_horizon_s: "2.0,1.0"
+
+    # Synthetic path while the real one is not there yet: one sphere per
+    # path_horizon_s entry (same order, path_radius), placed where the real
+    # horizon would be if the TCP left now for the goal in a straight line at
+    # this average speed — horizon_s * speed from the end effector, clamped at
+    # the goal (2 s -> 0.12 m, 1 s -> 0.06 m). Fills the 10-15 s the arm's
+    # planner takes after the pregrasp order with a region of the same shape
+    # as the real corridor at t=0 of the plan. 0 = goal sphere alone until the
+    # path arrives.
+    synthetic_tcp_speed_mps: 0.03
+    # Frame whose origin is the end effector for the line above
+    ee_frame: "dsr01/link_6"
+
+    # Frame assumed for goal_topic, which carries no header (shared with
+    # workspace_reachability_node)
+    planning_frame: "dsr01/base_link"
+
+    # geometry_msgs/Twist topic the controller publishes on
+    cmd_vel_topic: "/cmd_vel"
+
+    # Twist topic the mobile base actually listens to. An external relay (outside
+    # this workspace) forwards cmd_vel_topic to it. workspace_reachability_node
+    # logs both and integrates the base position from *this* one, so a dead relay
+    # shows up as a controller command with no matching base command instead of
+    # silently looking like a run where the base chose not to move. Set it equal
+    # to cmd_vel_topic (or empty) when there is no relay.
+    base_cmd_vel_topic: "/r100_0597/joy_teleop/cmd_vel"
+
+    # Marker id used as the fallback workspace center (WorkspaceRegionSource);
+    # -1 = first marker in the array. Independent of grasp.py's own
+    # target_marker_id in grasp_params.yaml, which selects the marker it
+    # actually grasps.
+    target_marker_id: 18
+
+    # Path to the reachability model YAML config (shared with workspace_reachability_node)
+    model_config_path: "/home/ros2_ws/src/test.yaml"
+
+    # Run the PyTorch fallback in half precision (ignored when a TRT engine loads)
+    # (shared with workspace_reachability_node)
+    fp16: false
+
+    # Goal sphere radius in meters (region center 0). Shared with
+    # workspace_reachability_node's own goal-sphere scoring
+    workspace_radius: 0.10
+
+    # Path-tail sphere radius in meters (region centers 1+). Defaults to the same
+    # value as workspace_radius
+    path_radius: 0.10
+
+    # Grid spacing delta in meters; also bounds travel between gradient updates
+    grid_spacing: 0.1
+
+    # Number of candidate base positions per grid side (must be odd, >= 3); total
+    # candidates = grid_size**2 (3 -> 9, 5 -> 25, 7 -> 49). Cost scales linearly with
+    # candidate count -- see OPTIMIZATIONS.md
+    grid_size: 3
+
+    # Commanded speed ceiling in m/s (hardware-validated maximum)
+    base_speed: 0.02
+
+    # Fraction of delta the base may travel per control cycle; sets the adaptive cap
+    step_fraction: 0.5
+
+    # Below this |grad Q| (1/m) the node declares convergence and publishes zero.
+    # Equivalent to the old min_speed=0.005 / control_gain=0.2 threshold.
+    min_gradient: 0.025
+
+    # Reference |grad Q| (1/m) for the linear taper near the optimum; 0 disables it.
+    # Above this the base runs at base_speed; below it the speed falls off in
+    # proportion to |grad Q|, so the base decelerates into the optimum instead of
+    # arriving at full speed and overshooting it.
+    #
+    # 0.25 is the median |grad Q| measured over the 37 commanded cycles of
+    # run_20260910_170054 (range 0.078 - 1.049), so roughly half the approach runs
+    # at full speed and the final half decelerates.
+    #
+    # Keep in sync with min_gradient: the slowest command the base is ever asked
+    # for, just before the convergence latch fires, is
+    #     base_speed * min_gradient / gradient_taper_ref
+    # At 0.025 * 0.025 / 0.25 that is 0.0025 m/s, well under the drive deadband --
+    # the base would be commanded but not actually move. Raise min_gradient to
+    # ~0.08 for a 0.008 m/s floor if that turns out to be the case on hardware.
+    gradient_taper_ref: 0.025
+
+    # Gradient stencil: 'least_squares' (all grid_size**2 maps) or 'central' (4
+    # nearest neighbors of center, regardless of grid_size)
+    gradient_method: "least_squares"
+
+    # Load world-fixed obstacles from YAML so they are not translated with the base
+    use_static_obstacles: false
+
+    # Path to the static obstacles YAML
+    static_obstacles_yaml: "/home/ros2_ws/src/capacitynet/config/floor_world.yml"
+
+    # Rate in Hz at which /cmd_vel is (re)published by the watchdog
+    publish_rate: 10.0
+
+    # Seconds without a reachability update before the base is stopped
+    command_timeout: 2.10
+
+    # Seconds without a marker detection before the base is stopped
+    marker_timeout: 2.0
+
+    # Seconds without an MPC goal/path before falling back to the marker
+    mpc_timeout: 5.0
+
+    # Start commanding immediately instead of waiting for ~/enable
+    start_enabled: false
+
+    # Grasp state topic; kept for the legacy whole-state interlock below (now
+    # unused by default) and for workspace_reachability_node's own episode-
+    # boundary detection (state_topic/idle_state_value further down).
+    grasper_state_topic: "/object_grasper/state"
+
+    # Comma-separated grasper states that permit base motion via the old
+    # whole-state gate. Empty by default: grasp.py now uses its own
+    # ~/grasp_motion_enable service (see below) for a precise, distance-based
+    # cutoff instead of holding this open for the entire act_move_pregrasp
+    # state. Set this if you want the old coarse behavior back instead.
+    grasper_allowed_states: ""
+
+    # grasp.py's and release.py's own interlocks each live on a fixed
+    # (non-parameterized) service -- ~/grasp_motion_enable and
+    # ~/release_motion_enable (SetBool) -- which each node calls explicitly
+    # during its own approach leg (act_move_pregrasp / act_move_preplace) up
+    # to grasp_near_threshold / release_near_threshold from its approach
+    # target. See base_commander.py's module docstring for why these are OR'd
+    # with, not entries alongside, grasper_allowed_states.
+
+    # Fixed workspace center "x,y,z" in the voxel grid frame, overriding both the MPC
+    # goal and the marker. Required for bag replay, since no recorded bag contains
+    # /fiducial_markers or /mpc_predicted_path
+    static_workspace_center: ""
+
+    # Log gradient, velocity and cycle time each control cycle
+    log_timing: true
+
+    # Log the grid_size x grid_size block of quality scores each control cycle
+    log_quality_scores: false
+
+    # Publish the grid_size**2 candidate scores and the gradient arrow as RViz markers
+    publish_debug_markers: true
+
+    # --- workspace_reachability_node-only params (see workspace_reachability.launch.py) ---
+
+    # Max number of path poses evaluated per trajectory message (0 = all)
+    path_max_samples: 16
+
+    # Directory for episodes_index.csv and per-episode subdirectories (empty =
+    # timestamped default under capacitynet/results). The launch file overrides it
+    # with the shared run_dir
+    output_dir: ""
+
+    # Free-text run identifier and A/B condition, stamped on every index and
+    # phase-summary row. Both are set by the launch file
+    run_label: ""
+    base_control: true
+
+    # Log every per-trajectory-message sample to the console
+    log_each_sample: false
+
+    # Save a matplotlib PNG (Q_goal / Q_path over time) at the end of each episode
+    generate_episode_plot: true
+
+    # Save base_trajectory.png + run_summary.png when the node shuts down
+    generate_run_plots: true
+
+    # std_msgs/String topic carrying brain.py's state machine state. An episode runs
+    # from the moment this leaves idle_state_value until it returns to it -- i.e. the
+    # whole cycle: act_home_enter, act_grasp, act_release, act_home_exit
+    episode_state_topic: "/brain/state"
+
+    # Sub-state topics, used to refine the phase during act_grasp / act_release
+    # (phase becomes "<brain_state>:<sub_state>"), not to delimit episodes
+    grasp_state_topic: "/object_grasper/state"
+    release_state_topic: "/object_releaser/state"
+
+    # std_msgs/String "<success|failure|cancelled>|<message>" published by brain.py
+    # just before returning to idle; without it every episode ends indistinguishably
+    outcome_topic: "/brain/outcome"
+
+    # Seconds to wait for outcome_topic after the state returns to idle before
+    # recording the episode as outcome="unknown" (the two are separate topics with
+    # no relative ordering guarantee)
+    outcome_grace_s: 0.5
+
+    # Episodes shorter than this are discarded, directory included. 0.0 keeps
+    # everything; raise it to drop the few-millisecond spurious episodes a state
+    # topic produces when it flickers through idle
+    min_episode_duration_s: 0.0
+
+    # Minimum seconds between two reachability inferences in the recorder. This node
+    # runs a *second* UNet3D on the same Orin as the controller; throttle it here
+    # when the run is measuring real-time performance. 0.0 = infer on every message
+    rm_min_period_s: 0.0
+
+    # State value meaning "not running", shared by brain.py, grasp.py and release.py
+    idle_state_value: "idle"
+
+    # sensor_msgs/JointState topic logged for velocity/acceleration/manipulability
+    joint_states_topic: "/dsr01/joint_states"
+
+    # curobo_msgs/MpcStepDiagnostics topic logged for MPC solve timing/costs, and the
+    # trigger for the per-cycle IK/FK-batch reachability check
+    mpc_diagnostics_topic: "/mpc_step_diagnostics"
+
+    # curobo_msgs/FkBatch service used to validate IKDH-generated candidate configs
+    fk_batch_service: "/curobo_trajectory_planner/fk_batch"
+
+    # IKDH bundled robot preset (DH + jacobian) used for IK and manipulability
+    ikdh_robot_yaml: "doosan_robotics_m1013.yaml"
+
+    # Fixed size of each FkBatch request; IKDH solutions are zero-padded to it
+    fk_batch_size: 8
+
+    # Doosan arm joint names, in DH/IKDH order, matched against joint_states_topic
+    arm_joint_names: ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"]

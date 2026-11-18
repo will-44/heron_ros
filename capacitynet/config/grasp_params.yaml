@@ -1,0 +1,218 @@
+# Parameters for the `grasp` node (grasp.py / ObjectGrasper).
+#
+# Override a single value without editing this file:
+#   ros2 launch capacitynet <launch file> grasp_params_file:=/path/to/override.yaml
+# or after launch: ros2 param set /object_grasper <name> <value>
+
+/**:
+  ros__parameters:
+    # Kinect is the primary camera; the D405 only takes over once the
+    # kinect hasn't reported a detection for camera_failover_timeout
+    # seconds, and control returns to it as soon as it reports again.
+    primary_marker_topic: "/kinect/fiducial_markers"
+    secondary_marker_topic: "/d405/fiducial_markers"
+    camera_failover_timeout: 1.0
+
+    # Marker id to grasp; -1 = first marker in the array. Set to the actual
+    # tag id used for this task instead of relying on detection order.
+    target_marker_id: 18
+
+    trigger_topic: "/brain/trigger"
+
+    # Marker pose smoothing: average the last N detections instead of
+    # trusting each one raw, so a single bad detection frame doesn't
+    # instantly become the grasp target.
+    marker_avg_window: 5
+    # A new sample farther than this from the current running average is
+    # dropped as a likely detection glitch rather than real marker motion.
+    marker_avg_max_jump: 0.05  # m
+    # ...unless the marker hasn't been seen for longer than this: then the
+    # buffer is stale and the new sample is accepted unconditionally as a
+    # fresh acquisition instead of being compared against it.
+    marker_avg_reset_gap: 1.0  # s
+    # Fixed frame the marker pose is remembered in. The tag is static in the
+    # world, so a pose kept in the lidar/map odometry frame (~5 cm accurate)
+    # stays valid however far the base drives while the tag is occluded, and
+    # is re-projected into planning_frame through TF on every live-goal tick.
+    # Replaces the old marker_stale_timeout gate, which cached the pose in
+    # planning_frame (attached to the base) and therefore had to stop the
+    # base on every occlusion: run_20260914_153800 lost 29 s of a 57 s
+    # preplace leg to two such holds. Must be TF-connected to planning_frame.
+    marker_fixed_frame: "odom"
+
+    # Planning frame = curobo base_link (target_pose has no frame_id).
+    planning_frame: "dsr01/base_link"
+    # Unified "plan + execute" action: moves the arm to target_pose.
+    execute_action: "/curobo_trajectory_planner/execute_trajectory"
+    # While execute_trajectory's reactive controller (MPC) is servoing toward
+    # pregrasp/grasp, republish the offset target recomputed from the *live*
+    # marker pose here so a moving tag keeps pulling the goal (mpc_goal_callback
+    # forwards it into planner.set_live_goal(...)).
+    mpc_goal_topic: "/curobo_trajectory_planner/mpc_goal"
+    mpc_goal_rate: 10.0
+
+    # Fallback arrival check for planners whose on_target never fires
+    # (e.g. hold_count/orientation gating never converges): if the
+    # solver's own controller_position_error agrees with the FK-measured
+    # position_error within this threshold AND position_error itself is
+    # below it, treat the arm as on target. controller_position_error is
+    # -1.0 when the active planner doesn't expose it (only LBFGS does) —
+    # that sentinel is excluded from the comparison.
+    controller_error_match_threshold: 0.05  # m
+    # controller_position_error must itself be below this (very tight)
+    # threshold to bypass on_target — a loose match against position_error
+    # alone isn't enough, since two errors that are merely similar but
+    # both still large don't mean the arm has actually arrived.
+    controller_error_bypass_threshold: 1.0e-3  # m
+
+    # Watchdog for a curobo execution that has internally "solved" (its
+    # own controller_position_error keeps shrinking) while the real arm
+    # has stalled (position_error plateaus) — observed after a rejected
+    # SpeedJ command (acceleration limit / missed control deadline),
+    # often triggered by simultaneous base motion. See
+    # execution_divergence_watchdog.py for the mechanism. Cancelling and
+    # resending the goal re-seeds the solver from the real robot state
+    # and reliably recovers it; retargeting via mpc_goal alone does not.
+    divergence_watchdog_enabled: true
+    divergence_threshold: 0.02      # m
+    divergence_debounce_count: 3    # feedback samples
+    divergence_grace_period: 3.0    # s after a resync
+    divergence_max_resyncs: 10       # per attempt
+    divergence_min_resync_interval: 5.0  # s
+
+    # Current state-machine state (e.g. "idle", "act_move_grasp"), as
+    # std_msgs/String. Transient-local + published on every transition, so
+    # a subscriber started mid-sequence still gets the current value
+    # immediately instead of waiting for the next change.
+    state_topic: "~/state"
+
+    # SetBool service on BaseCommander (gradient_base_controller) opened
+    # while in act_move_pregrasp and farther than grasp_near_threshold from
+    # grasp_approach_target, closed otherwise -- lets the mobile base keep
+    # moving during the grasp approach. See base_commander.py's module
+    # docstring for why it's OR'd with, not another entry alongside,
+    # grasper_allowed_states (empty by default in
+    # gradient_base_controller_params.yaml, since this service now supersedes
+    # that whole-state gate with a precise cutoff).
+    grasp_motion_enable_service_name: "/gradient_base_controller/grasp_motion_enable"
+    # FK position_error (m) below which the arm is considered close enough to
+    # grasp_approach_target that the mobile base must stop moving, even
+    # though execute_trajectory's own on_target/arrival tolerance
+    # (controller_error_*_threshold above) may not have fired yet.
+    grasp_near_threshold: 0.10  # m
+
+    # act_move_grasp (final pregrasp->grasp leg, right before contact) uses
+    # the Doosan driver's native compliance instead of curobo, so
+    # marker/pose error at contact is absorbed by compliance rather than
+    # fought by the free-space MPC: TaskComplianceCtrl (soft), then a
+    # normal MoveLine toward the object while compliant, then
+    # ReleaseComplianceCtrl.
+    move_line_service: "/dsr01/dsr_controller2/motion/move_line"
+    task_compliance_ctrl_service: "/dsr01/dsr_controller2/force/task_compliance_ctrl"
+    release_compliance_ctrl_service: "/dsr01/dsr_controller2/force/release_compliance_ctrl"
+    # Polled before ReleaseComplianceCtrl and before reporting the grasp
+    # complete, so neither happens while the arm is still moving.
+    check_motion_service: "/dsr01/dsr_controller2/motion/check_motion"
+    # dsr_controller2's RT command streaming must be paused before any
+    # compliance call: left on, it keeps streaming commands (observed
+    # rejection: internal event 'eSpeedJ') that TASK_COMPLIANCE_CONTROL
+    # rejects, which faulted the controller into MOTION_HOLD.
+    enable_streaming_service: "/ExecuteTrajectory/enable_streaming"
+    # Called once the gripper has closed on the object, so the driver's
+    # payload/TCP reflects the object now held rather than the bare gripper.
+    # Failure is logged but non-fatal for the grasp sequence.
+    set_tool_service: "/dsr01/dsr_controller2/system/set_current_tool"  # verify against the real driver
+    # MoveStop sent on cancel while a Doosan-driven state (compliant approach,
+    # backoff, retract) is running — a sync MoveLine only replies once the
+    # motion ends, so without it a cancel waits for the move to finish.
+    move_stop_service: "/dsr01/dsr_controller2/motion/move_stop"
+    grasp_tool_name: "gripper_objet"
+    # Hard timeout on every individual Doosan service call: the driver was
+    # observed to never reply at all to a rejected/invalid command, hanging
+    # the await forever otherwise — this bounds every single call so the
+    # state machine can always fail back to idle instead of freezing until
+    # an external cancel.
+    doosan_service_timeout: 2.0  # s
+    # MoveLine needs its own, much longer bound: with sync_type=SYNC the
+    # service can only reply once the motion physically finishes (confirmed
+    # outside compliance: a 100mm@50mm/s lift takes >2s and tripped
+    # doosan_service_timeout even though the move itself was running fine).
+    # Must exceed the longest commanded move's duration, not the driver's
+    # round-trip latency.
+    move_line_timeout: 20.0  # s
+    # check_motion poll period + overall bound on waiting for the robot to
+    # come back to DR_STATE_IDLE. Belt-and-braces after MoveLine, which is
+    # expected to have blocked already.
+    motion_poll_period: 0.1   # s
+    motion_idle_timeout: 20.0  # s
+    # Soft on all three translations, default-stiff on rotation (matches
+    # TaskComplianceCtrl's own rotational default of 200 Nm/rad).
+    compliant_translation_stiffness: 20000.0  # N/m, range 0-20000
+    compliant_rotation_stiffness: 500.0     # Nm/rad, range 0-400
+    compliance_ramp_time: 0.4               # s, range 0-1.0
+    # MANDATORY dead time between task_compliance_ctrl and the MoveLine:
+    # a movel issued while the stiffness is still ramping is ACCEPTED
+    # (success=True) and then silently dropped — check_motion never leaves
+    # IDLE and the robot doesn't move at all. Reproduced standalone: same
+    # command, gap=0 -> movel replies in 0.20s and nothing moves; gap=1.0s
+    # -> movel blocks 3.96s and the move runs, at both 500 and 3000 N/m.
+    # Must be > compliance_ramp_time; 1.0s is the verified value (0.4s
+    # alone was never tested and has no margin).
+    compliance_settle_time: 1.0             # s
+    # Reference frame for both TaskComplianceCtrl and the grasp MoveLine:
+    # base-frame, matching the explicit approach->grasp direction vector
+    # computed in _on_enter_move_pregrasp (_run['approach_dir']). Assumes
+    # planning_frame is the controller's DR_BASE frame; switch to
+    # DR_WORLD(2) if your controller (M2.40+) defines a separate world
+    # frame that planning_frame actually matches.
+    grasp_move_ref: 0  # DR_BASE
+    compliant_move_vel: [30.0, 20.0]  # [mm/s, deg/s]
+    compliant_move_acc: [60.0, 40.0]  # [mm/s^2, deg/s^2]
+
+    # act_retract_arm (post-grasp lift) also uses MoveLine directly instead of
+    # curobo. Not compliance-wrapped: this leaves contact and moves through
+    # free space, so no need to absorb force error. ref=DR_BASE assumes
+    # planning_frame ('dsr01/base_link') is the robot's own base frame with Z up;
+    # switch to DR_WORLD if your controller (M2.40+) defines a separate world
+    # frame that this TF frame actually corresponds to.
+    lift_move_ref: 0  # DR_BASE
+    lift_move_vel: [50.0, 30.0]  # [mm/s, deg/s]
+    lift_move_acc: [80.0, 50.0]  # [mm/s^2, deg/s^2]
+
+    # Gripper (real controller serves control_msgs/action/GripperCommand,
+    # a sensor_msgs/JointState-based goal — NOT the older GripperCommand type).
+    gripper_action: "/robotiq_gripper_controller/gripper_cmd"
+    gripper_joint_name: "robotiq_85_left_knuckle_joint"
+    gripper_open_position: 0.01
+    # URDF joint limit is [0.0, 0.8]; 0.7929 matches the driver's own
+    # fully-closed default (2f_85.ros2_control.xacro).
+    gripper_closed_position: 0.79
+    # Gripper not wired yet: just log open/close instead of calling the action.
+    simulate_gripper: false
+
+    # Object masking: excludes the grasped object's known geometry from
+    # world collision (curobo_ros robot_segmentation's set_mask service)
+    # so the planner can enter its volume between mask and grasp.
+    mask_service_name: "/set_mask"
+    mask_object_name: "grasp_target"
+    mask_object_dimensions: [0.25, 0.1, 0.1]
+    # Creates the masked object's collision geometry and attaches it to the
+    # gripper in one call, so it travels with the tool from act_move_grasp on.
+    attach_service_name: "/curobo_trajectory_planner/attach_object"
+
+    # Approach geometry: offsets along the marker Z axis (metres).
+    # position = marker_pos + approach_axis_sign * distance * marker_Z
+    approach_distance: -0.25
+    grasp_distance: -0.15
+    # -1.0: approach from the -Z side so the gripper Z (aligned with tag Z)
+    # points toward the object. Flip to +1.0 if the tag Z points the other way.
+    approach_axis_sign: 1.0
+    # Vertical (world/planning-frame Z) lift distance for act_retract_arm.
+    lift_distance: 0.10
+    # The cube is not exactly at the tag: it sits `grasp_cube_distance`
+    # away from the tag along the tag's own local `grasp_cube_axis` axis
+    # ('x', 'y', or 'z'). Tune both empirically by watching the
+    # 'cube_target' TF frame (published alongside approach/grasp/lift)
+    # against the real cube position in RViz.
+    grasp_cube_distance: 0.07
+    grasp_cube_axis: "x"
