@@ -1,5 +1,10 @@
 # Architecture — capacitynet
 
+> Written for capacitynet, before it became heron_experiment. Module paths changed:
+> `capacitynet/control/scripts/` → `heron_experiment/core/` (and `robot/`), `control/components/` →
+> `components/`, `control/nodes/` → `nodes/`; ReachabilityEngine/TRTModel → `core/reachability_model.py`
+> over `heron.inference` (docs/adr/0001 at the repository root).
+
 This document describes how the reachability-prediction and base-positioning code
 in `capacitynet/` fits together: the per-cycle data flow, which nodes instantiate
 which classes, and the class relationships underneath `reachability_pipeline.py`.

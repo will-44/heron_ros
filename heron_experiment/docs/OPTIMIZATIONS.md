@@ -1,5 +1,10 @@
 # Optimisations de performance — capacitynet
 
+> Written for capacitynet, before it became heron_experiment. Module paths changed:
+> `capacitynet/control/scripts/` → `heron_experiment/core/` (and `robot/`), `control/components/` →
+> `components/`, `control/nodes/` → `nodes/`; ReachabilityEngine/TRTModel → `core/reachability_model.py`
+> over `heron.inference` (docs/adr/0001 at the repository root).
+
 ## Contexte
 
 Le node `reachability_node` effectue une inférence UNet3D (5 niveaux, f-maps `[32,64,128,256,512]`)

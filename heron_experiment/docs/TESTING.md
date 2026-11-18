@@ -1,5 +1,10 @@
 # Testing the Gradient-Based Controller
 
+> Written for capacitynet, before it became heron_experiment. Module paths changed:
+> `capacitynet/control/scripts/` → `heron_experiment/core/` (and `robot/`), `control/components/` →
+> `components/`, `control/nodes/` → `nodes/`; ReachabilityEngine/TRTModel → `core/reachability_model.py`
+> over `heron.inference` (docs/adr/0001 at the repository root).
+
 This document describes how to test the gradient-based mobile base controller pipeline.
 
 ## Quick Start
