@@ -5,7 +5,7 @@ Every node of one run writes into the same timestamped `run_dir`, so a run is a
 single self-contained directory rather than files scattered between `results/` and
 whatever `debug_csv_path` happened to point at. Override it to name a run:
 
-    ros2 launch capacitynet gradient_base_controller.launch.py \\
+    ros2 launch heron_experiment gradient_base_controller.launch.py \\
         run_dir:=/home/ros2_ws/src/capacitynet/results/with_base_01 \\
         run_label:=with_base base_control:=true
 
@@ -24,6 +24,10 @@ from launch.substitutions import LaunchConfiguration
 
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+import os
+from ament_index_python.packages import get_package_share_directory
+
+CONFIG_DIR = os.path.join(get_package_share_directory('heron_experiment'), 'config')
 
 # Topic remappings, not node parameters: WorkspaceRegionSource's TransformListener
 # subscribes to the plain 'tf'/'tf_static' topics. This robot (leeloo) publishes
@@ -49,7 +53,7 @@ def generate_launch_description():
     # in one yaml -- see its header for how to override a single value.
     params_file_arg = DeclareLaunchArgument(
         'params_file',
-        default_value='/home/ros2_ws/src/capacitynet/config/gradient_base_controller_params.yaml',
+        default_value=os.path.join(CONFIG_DIR, 'gradient_base_controller_params.yaml'),
         description='Params file for gradient_base_controller and workspace_reachability_node',
     )
     declared.append(params_file_arg)
@@ -60,21 +64,21 @@ def generate_launch_description():
     # override a single value.
     grasp_params_file_arg = DeclareLaunchArgument(
         'grasp_params_file',
-        default_value='/home/ros2_ws/src/capacitynet/config/grasp_params.yaml',
+        default_value=os.path.join(CONFIG_DIR, 'grasp_params.yaml'),
         description='Params file for the grasp node',
     )
     declared.append(grasp_params_file_arg)
 
     release_params_file_arg = DeclareLaunchArgument(
         'release_params_file',
-        default_value='/home/ros2_ws/src/capacitynet/config/release_params.yaml',
+        default_value=os.path.join(CONFIG_DIR, 'release_params.yaml'),
         description='Params file for the release node',
     )
     declared.append(release_params_file_arg)
 
     brain_params_file_arg = DeclareLaunchArgument(
         'brain_params_file',
-        default_value='/home/ros2_ws/src/capacitynet/config/brain_params.yaml',
+        default_value=os.path.join(CONFIG_DIR, 'brain_params.yaml'),
         description='Params file for the brain node',
     )
     declared.append(brain_params_file_arg)
@@ -104,7 +108,7 @@ def generate_launch_description():
 
     # Later entries win, so these overrides take precedence over the yaml.
     gradient_base_controller_node = Node(
-        package='capacitynet',
+        package='heron_experiment',
         executable='gradient_base_controller',
         name='gradient_base_controller',
         output='screen',
@@ -118,7 +122,7 @@ def generate_launch_description():
     # Drives mpc_goal/mpc_predicted_path/grasper_state_topic, which the
     # controller above consumes (region anchor + grasper-state interlock).
     grasp_node = Node(
-        package='capacitynet',
+        package='heron_experiment',
         executable='grasp',
         name='object_grasper',
         output='screen',
@@ -129,7 +133,7 @@ def generate_launch_description():
     # Named object_releaser to match the node's own default name (release.py) and
     # the release_state_topic the recorder subscribes to.
     release_node = Node(
-        package='capacitynet',
+        package='heron_experiment',
         executable='release',
         name='object_releaser',
         output='screen',
@@ -139,7 +143,7 @@ def generate_launch_description():
 
     # Sequences the whole cycle and owns the episode boundary the recorder keys on.
     brain_node = Node(
-        package='capacitynet',
+        package='heron_experiment',
         executable='brain',
         name='brain',
         output='screen',
@@ -153,7 +157,7 @@ def generate_launch_description():
     # Per-episode reachability/manipulability/MPC-timing recorder, driven by the same
     # voxel grid / goal / path as the controller above and by brain_node's state topic.
     workspace_reachability_node = Node(
-        package='capacitynet',
+        package='heron_experiment',
         executable='workspace_reachability_node',
         name='workspace_reachability_node',
         output='screen',

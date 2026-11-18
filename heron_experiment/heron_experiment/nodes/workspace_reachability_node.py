@@ -82,10 +82,10 @@ from tf2_geometry_msgs import do_transform_pose_stamped
 import tf2_ros
 from tf2_ros import Buffer, TransformListener
 
-from capacitynet.control.scripts import experiment_plots
-from capacitynet.control.scripts.ikdh_manipulability import IkdhModel
-from capacitynet.control.scripts.workspace_evaluation import WorkspaceEvaluation
-from capacitynet.rm_model.reachability_engine import ReachabilityEngine
+from heron_experiment.core import experiment_plots
+from heron_experiment.robot.ikdh_manipulability import IkdhModel
+from heron_experiment.core.workspace_evaluation import WorkspaceEvaluation
+from heron_experiment.legacy_engine.reachability_engine import ReachabilityEngine
 
 # Prefix shared by every per-sample file. This is the uniformisation: whatever the
 # signal, a row says which episode it belongs to, how far into it, and under which

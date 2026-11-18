@@ -16,19 +16,21 @@ plotting node) does the same and simply never instantiates a BaseCommander.
 """
 
 from dataclasses import dataclass, field
+import os
 import time
 
 import numpy as np
 
+from ament_index_python.packages import get_package_share_directory
 from curobo_msgs.msg import SparseVoxelGrid
 from std_msgs.msg import Float32MultiArray
 from visualization_msgs.msg import MarkerArray
 
-from capacitynet.control.scripts.gradient_controller import GradientBasedController
-from capacitynet.control.scripts.grid_markers import build_grid_markers
-from capacitynet.control.components.node_component import NodeComponent
-from capacitynet.control.scripts.obstacle_transformer import ObstacleMapTransformer
-from capacitynet.rm_model.reachability_engine import ReachabilityEngine
+from heron_experiment.core.gradient_controller import GradientBasedController
+from heron_experiment.core.grid_markers import build_grid_markers
+from heron_experiment.components.node_component import NodeComponent
+from heron_experiment.core.obstacle_transformer import ObstacleMapTransformer
+from heron_experiment.legacy_engine.reachability_engine import ReachabilityEngine
 
 
 @dataclass
@@ -87,7 +89,8 @@ class ReachabilityPipeline(NodeComponent):
         self.gradient_method = self._declare('gradient_method', 'least_squares')
         self.use_static_obstacles = bool(self._declare('use_static_obstacles', False))
         self.static_obstacles_yaml = self._declare(
-            'static_obstacles_yaml', '/home/ros2_ws/src/capacitynet/config/floor_world.yml')
+            'static_obstacles_yaml',
+            os.path.join(get_package_share_directory('heron_experiment'), 'config', 'floor_world.yml'))
         self.log_timing = bool(self._declare('log_timing', True))
         self.log_quality_scores = bool(self._declare('log_quality_scores', False))
         self.publish_debug = bool(self._declare('publish_debug_markers', True))

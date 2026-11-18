@@ -37,9 +37,9 @@ import tf2_ros
 from tf2_ros import Buffer, TransformListener
 from visualization_msgs.msg import MarkerArray
 
-from capacitynet.control.scripts.grid_markers import build_region_markers
-from capacitynet.control.scripts.marker_tracker import CameraPriority, select_marker
-from capacitynet.control.components.node_component import NodeComponent
+from heron_experiment.core.grid_markers import build_region_markers
+from heron_experiment.core.marker_tracker import CameraPriority, select_marker
+from heron_experiment.components.node_component import NodeComponent
 
 
 class WorkspaceRegionSource(NodeComponent):

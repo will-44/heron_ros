@@ -41,8 +41,8 @@ from curobo_msgs.srv import SetPlanner
 from curobo_msgs.action import SendTrajectory
 from heron_interface.action import TriggerGrasp, TriggerRelease, TriggerPickPlace
 
-from ..scripts.execution_divergence_watchdog import ExecutionDivergenceWatchdog
-from ..scripts.state_machine import StateMachine
+from ..robot.execution_divergence_watchdog import ExecutionDivergenceWatchdog
+from ..robot.state_machine import StateMachine
 
 # States (plain strings, not Enum: a single place to touch when adding one).
 IDLE = 'idle'

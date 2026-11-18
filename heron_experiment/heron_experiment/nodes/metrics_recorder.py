@@ -6,7 +6,7 @@ The CSV is flushed after every row so data is preserved even on hard kill.
 
 Usage
 -----
-ros2 run capacitynet metrics_recorder \
+ros2 run heron_experiment metrics_recorder \
     --ros-args -p output_csv:=~/my_run.csv -p gpu_poll_rate_hz:=2.0
 """
 

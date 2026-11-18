@@ -4,6 +4,10 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+import os
+from ament_index_python.packages import get_package_share_directory
+
+CONFIG_DIR = os.path.join(get_package_share_directory('heron_experiment'), 'config')
 
 # Topic remappings, not node parameters: WorkspaceRegionSource's TransformListener
 # subscribes to the plain 'tf'/'tf_static' topics. This robot (leeloo) publishes
@@ -27,7 +31,7 @@ def generate_launch_description():
     # header for how to override a single value.
     grasp_params_file_arg = DeclareLaunchArgument(
         'grasp_params_file',
-        default_value='/home/ros2_ws/src/capacitynet/config/grasp_params.yaml',
+        default_value=os.path.join(CONFIG_DIR, 'grasp_params.yaml'),
         description='Params file for the grasp node',
     )
     declared.append(grasp_params_file_arg)
@@ -126,7 +130,7 @@ def generate_launch_description():
     )
 
     workspace_reachability_node = Node(
-        package='capacitynet',
+        package='heron_experiment',
         executable='workspace_reachability_node',
         name='workspace_reachability_node',
         output='screen',
@@ -150,7 +154,7 @@ def generate_launch_description():
     # Drives mpc_goal/mpc_predicted_path so the probe has something live to
     # score, instead of only ever working off a bag or static_workspace_center.
     grasp_node = Node(
-        package='capacitynet',
+        package='heron_experiment',
         executable='grasp',
         name='object_grasper',
         output='screen',

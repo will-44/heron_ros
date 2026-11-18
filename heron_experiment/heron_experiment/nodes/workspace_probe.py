@@ -9,7 +9,7 @@ there is no publisher for it anywhere in this node.
 Use it to replay a bag, watch the region and the candidate-grid scores in
 RViz, or plot Q over a run, with the robot safely out of the loop:
 
-    ros2 run capacitynet workspace_probe --ros-args
+    ros2 run heron_experiment workspace_probe --ros-args
         -p static_workspace_center:="0.6,0.3,0.4"
 
 Every parameter of `gradient_base_controller` that concerns the region or the
@@ -21,8 +21,8 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
 from rclpy.node import Node
 
-from capacitynet.control.components.reachability_pipeline import ReachabilityPipeline
-from capacitynet.control.components.workspace_region import WorkspaceRegionSource
+from heron_experiment.components.reachability_pipeline import ReachabilityPipeline
+from heron_experiment.components.workspace_region import WorkspaceRegionSource
 
 
 class WorkspaceProbe(Node):

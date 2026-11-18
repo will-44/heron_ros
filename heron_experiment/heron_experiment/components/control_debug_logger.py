@@ -66,7 +66,7 @@ import h5py
 import numpy as np
 from std_srvs.srv import Trigger
 
-from capacitynet.control.components.node_component import NodeComponent
+from heron_experiment.components.node_component import NodeComponent
 
 _FIELDS = [
     'timestamp', 'cycle_s', 'dt_since_last_s',

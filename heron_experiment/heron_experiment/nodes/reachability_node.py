@@ -13,7 +13,7 @@ from sensor_msgs.msg import PointCloud2, PointField
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from std_srvs.srv import Trigger
 
-from .reachability_engine import ReachabilityEngine
+from heron_experiment.legacy_engine.reachability_engine import ReachabilityEngine
 
 
 class ReachabilityNode(Node):

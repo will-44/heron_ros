@@ -15,7 +15,7 @@ jitter frame to frame with any model or GPU non-determinism. That is
 deliberate -- it is what actually reaches the controller and the deadband in
 `base_commander.py`, not an idealized lower bound.
 
-    ros2 run capacitynet rm_noise_probe --ros-args \
+    ros2 run heron_experiment rm_noise_probe --ros-args \
         -p static_workspace_center:="0.6,0.3,0.4" \
         -p sample_window:=30
 
@@ -32,8 +32,8 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
 from rclpy.node import Node
 
-from capacitynet.control.components.reachability_pipeline import ReachabilityPipeline
-from capacitynet.control.components.workspace_region import WorkspaceRegionSource
+from heron_experiment.components.reachability_pipeline import ReachabilityPipeline
+from heron_experiment.components.workspace_region import WorkspaceRegionSource
 
 
 class RMNoiseProbe(Node):

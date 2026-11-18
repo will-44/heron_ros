@@ -6,7 +6,7 @@ load_reachability_voxel node steps through /group/0, /group/1, … in the
 HDF5 file and publishes each map to /reachability_map for RViz.
 
 Usage:
-  ros2 run capacitynet replay_maps --ros-args \
+  ros2 run heron_experiment replay_maps --ros-args \
     -p total_maps:=50 -p rate:=1.0 -p loop:=false
 """
 

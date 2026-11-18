@@ -28,10 +28,10 @@ from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.signals import SignalHandlerOptions
 
-from capacitynet.control.components.base_commander import BaseCommander
-from capacitynet.control.components.control_debug_logger import ControlDebugLogger
-from capacitynet.control.components.reachability_pipeline import ReachabilityPipeline
-from capacitynet.control.components.workspace_region import WorkspaceRegionSource
+from heron_experiment.components.base_commander import BaseCommander
+from heron_experiment.components.control_debug_logger import ControlDebugLogger
+from heron_experiment.components.reachability_pipeline import ReachabilityPipeline
+from heron_experiment.components.workspace_region import WorkspaceRegionSource
 
 
 class GradientBaseController(Node):

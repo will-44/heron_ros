@@ -4,6 +4,10 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+import os
+from ament_index_python.packages import get_package_share_directory
+
+CONFIG_DIR = os.path.join(get_package_share_directory('heron_experiment'), 'config')
 
 # Only the region and inference knobs — the probe has no motion parameters
 # because it has no BaseCommander, and so no way to command the base.
@@ -53,7 +57,7 @@ ARGUMENTS = [
 
     ('use_static_obstacles', 'false',
      'Load world-fixed obstacles from YAML so they are not translated with the base'),
-    ('static_obstacles_yaml', '/home/ros2_ws/src/capacitynet/config/floor_world.yml',
+    ('static_obstacles_yaml', os.path.join(CONFIG_DIR, 'floor_world.yml'),
      'Path to the static obstacles YAML'),
 
     ('marker_timeout', '2.0',
@@ -96,7 +100,7 @@ def generate_launch_description():
     # header for how to override a single value.
     declared.append(DeclareLaunchArgument(
         'grasp_params_file',
-        default_value='/home/ros2_ws/src/capacitynet/config/grasp_params.yaml',
+        default_value=os.path.join(CONFIG_DIR, 'grasp_params.yaml'),
         description='Params file for the grasp node',
     ))
 
@@ -108,7 +112,7 @@ def generate_launch_description():
     ]
 
     workspace_probe_node = Node(
-        package='capacitynet',
+        package='heron_experiment',
         executable='workspace_probe',
         name='workspace_probe',
         output='screen',
@@ -119,7 +123,7 @@ def generate_launch_description():
     # Drives mpc_goal/mpc_predicted_path so the probe has something live to
     # score, instead of only ever working off a bag or static_workspace_center.
     grasp_node = Node(
-        package='capacitynet',
+        package='heron_experiment',
         executable='grasp',
         name='object_grasper',
         output='screen',
