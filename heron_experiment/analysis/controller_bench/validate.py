@@ -42,9 +42,9 @@ from heron_experiment.core.reachability_model import ReachabilityModel  # noqa: 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--package', default=PACKAGE, help='Heron Package (default: %(default)s)')
-    ap.add_argument('--precision', default=PRECISION, help='pytorch, fp32, fp16 or int8 (default: %(default)s)')
+    ap.add_argument('--precision', default=PRECISION, help='fp32, fp16 or int8 (default: %(default)s)')
     args = ap.parse_args()
-    model = ReachabilityModel(args.package, args.precision, fallback=True)
+    model = ReachabilityModel(args.package, args.precision)
     print(f'backend = {model.backend}')
 
     for group in ('1', '2'):

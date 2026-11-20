@@ -82,14 +82,12 @@
 
     # Heron Package to run: a name under $HERON_EXPERIMENT_DIR/heron_packages, or a path
     # (shared with workspace_reachability_node). Make it with `heron export` where the
-    # Experiment was trained, then build its engine here with heron benchmark.
+    # Experiment was trained, then build its engine here: ros2 run heron_experiment build_engine.
     heron_package: "full_setup_20260805_1144"
 
-    # Engine precision: pytorch, fp32, fp16 or int8 (shared with workspace_reachability_node)
+    # Engine precision: fp32, fp16 or int8 (shared with workspace_reachability_node). A node
+    # refuses to start without that engine, or with one that fails the reference check.
     precision: "fp16"
-
-    # If that engine is missing, run PyTorch instead (slower) and say so, rather than fail
-    allow_pytorch_fallback: true
 
     # Goal sphere radius in meters (region center 0). Shared with
     # workspace_reachability_node's own goal-sphere scoring

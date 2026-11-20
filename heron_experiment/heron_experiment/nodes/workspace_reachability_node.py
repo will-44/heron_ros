@@ -416,7 +416,6 @@ class WorkspaceReachabilityNode(Node):
     def _load_parameters(self):
         self.declare_parameter('heron_package', '')
         self.declare_parameter('precision', 'fp16')
-        self.declare_parameter('allow_pytorch_fallback', True)
 
         self.declare_parameter('voxel_grid_topic', '/curobo_trajectory_planner/voxel_grid_sparse')
         self.declare_parameter('goal_topic', '/curobo_trajectory_planner/mpc_goal')
@@ -477,7 +476,6 @@ class WorkspaceReachabilityNode(Node):
 
         self.heron_package = self.get_parameter('heron_package').value
         self.precision = self.get_parameter('precision').value
-        self.allow_pytorch_fallback = bool(self.get_parameter('allow_pytorch_fallback').value)
 
         self.voxel_grid_topic = self.get_parameter('voxel_grid_topic').value
         self.goal_topic = self.get_parameter('goal_topic').value
@@ -533,9 +531,7 @@ class WorkspaceReachabilityNode(Node):
         if not self.heron_package:
             raise ValueError('heron_package is not set: give a Heron Package path or name')
         self.get_logger().info(f'Loading Heron Package {self.heron_package!r} at {self.precision}...')
-        self.model = ReachabilityModel(
-            self.heron_package, self.precision, fallback=self.allow_pytorch_fallback,
-            log=self.get_logger().warn)
+        self.model = ReachabilityModel(self.heron_package, self.precision, log=self.get_logger().info)
         self.device = str(self.model.device)
         self.get_logger().info(f'Reachability model loaded, running on {self.model.backend}')
 

@@ -1,6 +1,6 @@
 # A missing engine stops the node at startup; it is never built there
 
-Status: accepted
+Status: accepted, amended by 0004 (no PyTorch fallback; engines built by build_engine)
 
 A node asks for one precision of a Heron Package. If the engine for this GPU and
 TensorRT version is not in the package's engines/, `heron.inference.load` raises

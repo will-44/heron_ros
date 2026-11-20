@@ -76,12 +76,9 @@ class ReachabilityPipeline(NodeComponent):
         self.cycle_period = float(self._declare('cycle_period', 2.0))
         # The Heron Package to run: a path, or a name under
         # $HERON_EXPERIMENT_DIR/heron_packages. Its engine for `precision` must have
-        # been built on this machine (heron benchmark); see ReachabilityModel.
+        # been built on this machine (build_engine); see ReachabilityModel.
         self.heron_package = self._declare('heron_package', '')
         self.precision = self._declare('precision', 'fp16')
-        # A missing engine runs PyTorch instead (slower), loudly, rather than
-        # leaving the node without a model.
-        self.allow_pytorch_fallback = bool(self._declare('allow_pytorch_fallback', True))
         self.grid_spacing = float(self._declare('grid_spacing', 0.10))
         # Candidate grid is grid_size x grid_size (must be odd, >= 3). Cost
         # scales linearly with grid_size**2 — see OPTIMIZATIONS.md. Validated
@@ -139,9 +136,7 @@ class ReachabilityPipeline(NodeComponent):
         if not self.heron_package:
             raise ValueError('heron_package is not set: give a Heron Package path or name')
         self.log.info(f'Loading Heron Package {self.heron_package!r} at {self.precision}...')
-        self.model = ReachabilityModel(
-            self.heron_package, self.precision, fallback=self.allow_pytorch_fallback,
-            log=self.log.warn)
+        self.model = ReachabilityModel(self.heron_package, self.precision, log=self.log.info)
         self.device = str(self.model.device)
 
         # Resolution is a placeholder; it is overwritten per message from the
@@ -192,7 +187,7 @@ class ReachabilityPipeline(NodeComponent):
 
     @property
     def backend(self):
-        """What actually runs the network: 'pytorch', 'tensorrt_int8', ..."""
+        """What actually runs the network: 'tensorrt_fp16', ..."""
         return self.model.backend
 
     # ── Cycle ────────────────────────────────────────────────────────────────

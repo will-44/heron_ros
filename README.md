@@ -4,7 +4,8 @@ Heron on the robot: reachability inference with a Heron Package, gradient-based
 mobile base positioning, and the pick-and-place experiments of the thesis.
 
 The network, its data and its training live in [Heron](https://github.com/Lab-CORO/Heron).
-This repository only runs a network exported from there (see docs/adr/0001).
+This repository only runs a Heron Package exported from there, with TensorRT: Heron is not
+installed on the robot (see docs/adr/0004).
 
 | Package | |
 |---|---|
@@ -16,12 +17,12 @@ This repository only runs a network exported from there (see docs/adr/0001).
 In the robot's container (ROS 2 Jazzy, Jetson Orin):
 
 ```bash
-pip install --no-deps -e /home/heron            # Heron, mounted next to the workspace
 export HERON_EXPERIMENT_DIR=/home/ros2_ws/src/heron_ros/heron_experiment
 cd /home/ros2_ws && colcon build --symlink-install --packages-select heron_interface heron_experiment
 ```
 
-Then put a Heron Package in `heron_experiment/heron_packages/` and build its engines
+Then put a Heron Package in `heron_experiment/heron_packages/` and build its engines:
+`ros2 run heron_experiment build_engine --package <experiment> --precision fp16`
 (heron_experiment/heron_packages/README.md).
 
 ## Run an experience

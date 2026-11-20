@@ -13,9 +13,9 @@ candidat central (offset 0,0) est la scène non translatée telle qu'elle a ét�
 donnée au réseau.
 
 Modèle : le Heron Package réellement déployé (config/gradient_base_controller_params.yaml :
-`heron_package`, `precision`), chargé par heron.inference, avec repli PyTorch si son
-engine n'est pas construit sur cette machine. Le Package encode lui-même l'entrée : le
-banc ne manipule que de l'occupation, comme le contrôleur.
+`heron_package`, `precision`), chargé comme sur le robot : son engine TensorRT, construit
+sur cette machine par build_engine, et l'encodage écrit dans son manifeste. Le banc ne
+manipule que de l'occupation, comme le contrôleur.
 
 Reproduit à l'identique la chaîne de production :
     translate_filled(occupation, fill=False)  ->  ReachabilityModel.predict  ->
@@ -79,8 +79,7 @@ class Harness:
 
     def __init__(self, group='0', package=PACKAGE, precision=PRECISION, verbose=True):
         self.verbose = verbose
-        self.model = ReachabilityModel(package, precision, fallback=True,
-                                       log=print if verbose else (lambda _msg: None))
+        self.model = ReachabilityModel(package, precision, log=print if verbose else (lambda _msg: None))
         self.device = self.model.device
         self.backend = self.model.backend
 

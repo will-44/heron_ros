@@ -37,6 +37,7 @@ setup(
             'release=heron_experiment.nodes.release:main',
             'brain=heron_experiment.nodes.brain:main',
             'replay_maps=heron_experiment.nodes.replay_maps:main',
+            'build_engine=heron_experiment.build_engine:main',
         ]
     },
 )

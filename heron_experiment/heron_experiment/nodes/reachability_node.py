@@ -21,10 +21,9 @@ class ReachabilityNode(Node):
         super().__init__('reachability_node')
 
         # Heron Package (path, or name under $HERON_EXPERIMENT_DIR/heron_packages) and the
-        # precision of its engine, built beforehand on this machine by heron benchmark.
+        # precision of its engine, built beforehand on this machine by build_engine.
         self.declare_parameter('heron_package', '')
         self.declare_parameter('precision', 'fp16')
-        self.declare_parameter('allow_pytorch_fallback', True)
         self.declare_parameter('save_map_path', '~/reachability_map.h5')
         self.declare_parameter('continuous_save', False)
         self.declare_parameter('save_replay_path', '')
@@ -34,14 +33,13 @@ class ReachabilityNode(Node):
         if not package:
             raise ValueError('heron_package is not set: give a Heron Package path or name')
         precision = self.get_parameter('precision').value
-        fallback = bool(self.get_parameter('allow_pytorch_fallback').value)
 
         # Resolved on the first continuous save, so a run that never saves leaves no
         # empty run directory behind. Default: results/reachability_node/<run_id>/raw/.
         self._replay_path = None
         self._save_counter = 0
 
-        self.model = ReachabilityModel(package, precision, fallback=fallback, log=self.get_logger().warn)
+        self.model = ReachabilityModel(package, precision, log=self.get_logger().info)
         self.get_logger().info(
             f'Heron Package {self.model.experiment} loaded, running on {self.model.backend}')
 

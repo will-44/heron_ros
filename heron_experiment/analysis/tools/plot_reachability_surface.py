@@ -109,7 +109,7 @@ def parse_args():
     p.add_argument('--heron-package', default='full_setup_20260805_1144',
                    help='Heron Package: a name under heron_packages/ or a path (default: %(default)s)')
     p.add_argument('--precision', default='fp16',
-                   help='pytorch, fp32, fp16 or int8; PyTorch runs if the engine is not built '
+                   help='fp32, fp16 or int8; its engine must be built (build_engine) '
                         '(default: %(default)s)')
     p.add_argument('--use-static-obstacles', action='store_true')
     p.add_argument('--static-obstacles-yaml',
@@ -218,7 +218,7 @@ def sweep_quality_surface(msg, centers, radius, extent, step, interp_factor,
     import torch
 
     print(f'Loading Heron Package {heron_package} ({precision})...')
-    model = ReachabilityModel(heron_package, precision, fallback=True)
+    model = ReachabilityModel(heron_package, precision)
     device = model.device
     print(f'Backend: {model.backend} on {device}')
     mismatch = model.check_grid(msg)

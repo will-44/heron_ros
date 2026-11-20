@@ -1,6 +1,6 @@
 # Hand Scenes to Heron as NumPy, one at a time, until measured otherwise
 
-Status: accepted (cost measured 2026-11-18, see below)
+Status: superseded by 0004 (the encoding is a value in the manifest; the Scenes stay on the GPU)
 
 The Candidates' Scenes are built on the GPU, then each goes to `Predictor.predict`
 as a NumPy array: Heron applies the Experiment's val transform with pytorch-3dunet's

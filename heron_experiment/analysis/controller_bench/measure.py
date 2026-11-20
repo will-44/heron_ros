@@ -44,7 +44,7 @@ def s21(h, base_mask):
         qs = h.q_at(offs, base_mask=base_mask)
         dt = time.time() - t0
         # Paquet de 1 vs paquet de 9. Avec l'ancien TRTModel ce n'étaient pas les
-        # mêmes noyaux (CUDA Graph vs execute_async_v3) ; heron.inference passe
+        # mêmes noyaux (CUDA Graph vs execute_async_v3) ; le Package passe
         # chaque Scene seule, donc ils doivent coïncider exactement.
         q1 = h.q_at([(dist, 0.0)], base_mask=base_mask, chunk=1)[0]
         res[dist] = {

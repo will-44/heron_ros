@@ -1,6 +1,6 @@
 # Run the network through heron.inference, never a copy of it
 
-Status: accepted
+Status: superseded by 0004 (the robot runs a self-contained Heron Package, without Heron)
 
 heron_experiment calls `heron.inference.load(package, precision)` and keeps no
 inference code of its own: no model loading, no TensorRT runtime, no input encoding.

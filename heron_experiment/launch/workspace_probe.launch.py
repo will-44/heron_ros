@@ -38,9 +38,7 @@ ARGUMENTS = [
     ('heron_package', 'full_setup_20260805_1144',
      'Heron Package: a name under $HERON_EXPERIMENT_DIR/heron_packages, or a path'),
     ('precision', 'fp16',
-     'Engine precision: pytorch, fp32, fp16 or int8 (built beforehand by heron benchmark)'),
-    ('allow_pytorch_fallback', 'true',
-     'Run PyTorch, and say so, if the engine for that precision is missing'),
+     'Engine precision: fp32, fp16 or int8 (built beforehand by build_engine)'),
 
     ('workspace_radius', '0.10',
      'Goal sphere radius in meters (region center 0)'),

@@ -51,7 +51,7 @@ def generate_launch_description():
     precision_arg = DeclareLaunchArgument(
         'precision',
         default_value='fp16',
-        description='Engine precision: pytorch, fp32, fp16 or int8 (built beforehand by heron benchmark)'
+        description='Engine precision: fp32, fp16 or int8 (built beforehand by build_engine)'
     )
 
     workspace_radius_arg = DeclareLaunchArgument(

@@ -14,8 +14,9 @@ class ObstacleMapTransformer:
     CPU-GPU transfers.
 
     Works on occupancy (True where a voxel holds an obstacle), never on the
-    network's encoded input: encoding a Scene is heron.inference's job, after
-    the translation. Cells a shift leaves without a source are free.
+    network's encoded input: encoding a Scene is the Heron Package's job (the
+    encoding its manifest gives), after the translation. Cells a shift leaves
+    without a source are free.
 
     When the base moves by (δx, δy), obstacles move by (-δx, -δy)
     in the base reference frame.
