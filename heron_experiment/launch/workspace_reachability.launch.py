@@ -69,8 +69,8 @@ def generate_launch_description():
     output_dir_arg = DeclareLaunchArgument(
         'output_dir',
         default_value='',
-        description='Directory for tests_index.csv and per-test subdirectories '
-                    '(empty = timestamped default under capacitynet/results)'
+        description='Directory for episodes_index.csv and the episode directories '
+                    '(empty = results/unnamed/<run_id>/raw under $HERON_EXPERIMENT_DIR)'
     )
 
     log_each_sample_arg = DeclareLaunchArgument(
